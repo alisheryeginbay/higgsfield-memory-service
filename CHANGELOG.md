@@ -4,6 +4,21 @@ Iteration history for the memory service. Newest first. Each entry tracks
 a single commit — what changed, why, what was observed, and what comes
 next.
 
+## v0.2 — feat: app factory + contract schemas + /health (2026-05-07)
+
+**What changed:** `schemas.py` with Pydantic v2 models for all 7 contract
+endpoints (`Message`, `TurnIn/Out`, `RecallIn/Out` + `Citation`,
+`SearchIn/Out` + `SearchHit`, `Memory` + `MemoriesOut`, `HealthOut`,
+`ErrorOut`). FastAPI `create_app()` factory with lifespan, env-driven
+`Settings` via pydantic-settings, optional bearer-token auth dependency,
+global exception handler that maps unhandled errors to 500 + `ErrorOut`
+(no stack-trace leak). `/health` router wired up.
+
+**Verified:** TestClient probe of `/health` returns `{"status":"ok"}`.
+
+**Next:** asyncpg pool + pgvector codec + Alembic migration with `turns`
+and `memories` tables.
+
 ## v0.1 — chore: scaffold project skeleton + lock stack (2026-05-07)
 
 **What changed:** Initialised the project skeleton — `pyproject.toml`,
