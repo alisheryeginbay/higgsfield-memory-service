@@ -22,8 +22,10 @@ from tests.recall_quality_runner import run_all
 REPO_ROOT = Path(__file__).resolve().parent.parent
 FIXTURES_DIR = REPO_ROOT / "fixtures" / "recall_quality"
 
-# v0.7 baseline. Ratchet up in subsequent commits.
-MIN_SCORE = 0.0
+# Ratcheted floor — bump on commits that improve recall.
+#   v0.7   0.000 (stub /recall, only noise scenario passes)
+#   v0.10  0.683 (recall surfaces user memories; measured 0.733 with 0.05 slack)
+MIN_SCORE = 0.683
 
 
 pytestmark = pytest.mark.asyncio

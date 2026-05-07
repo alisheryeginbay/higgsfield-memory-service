@@ -4,6 +4,49 @@ Iteration history for the memory service. Newest first. Each entry tracks
 a single commit — what changed, why, what was observed, and what comes
 next.
 
+## v0.10 — feat: recall surfaces user memories as structured context (2026-05-07)
+
+**What changed:** `/recall` now actually does something. New
+`src/memory_service/recall.py` renders a user's active memories into
+markdown sections (Known facts / Preferences / Opinions / Significant
+events), one bullet per memory, with a citation list whose ordering
+matches the rendered context. Token budget approximated via chars/4
+with type-priority truncation (facts → preferences → opinions →
+events; recency tiebreaker within each type). Real handler in
+`api/recall.py` replaces the stub. Cold sessions and unknown users
+still return `{"context":"","citations":[]}`.
+
+**Recall-quality score: 0.200 → 0.733** (measured against the live
+stack with extraction enabled).
+
+| Scenario | Score | Notes |
+|---|---|---|
+| 01 personal_facts | 4/4 (1.00) | Employer / role / city / pet all surfaced. |
+| 02 fact_evolution | 1/3 (0.33) | Only `career_history` passes. Both employers active → forbidden_any "stripe" hits. |
+| 03 preferences_corrections | 1/3 (0.33) | Same pattern: rejected TS preference still active alongside the corrected Python one. |
+| 04 multi_hop | 2/2 (1.00) | Render-everything strategy accidentally solves multi-hop because both facts are in the same memory pile. |
+| 05 noise_resistance | 3/3 (1.00) | No memories → empty context, no hallucination. |
+
+**What's still failing and why:** scenarios 2 and 3 rely on
+**supersession** — old "Stripe" / "TypeScript" memories are still
+`active=true` and surface in the rendered context, tripping
+`forbidden_any`. Fixing that is a deliberate separate commit so the
+next score delta is cleanly attributable.
+
+**MIN_SCORE bumped:** 0.683 (measured 0.733 minus 0.05 slack for LLM
+jitter — locks the floor without making one-probe flakes break CI).
+
+**Tests:** 10 new renderer unit tests in `tests/test_recall_unit.py`
+cover section ordering, citation alignment, the `(key)` parenthetical
+heuristic, event date prefixes, and tight-budget truncation. Full
+suite: 27 passed + 1 skipped (live extraction, env-gated).
+
+**Next:** supersession on insert — when an extracted memory shares a
+key with an existing active one, mark the old as `active=false` with
+`supersedes` filled in. That should kill the `forbidden_any` failures
+in scenarios 2 and 3 and unlock the next chunk of recall-quality
+score.
+
 ## v0.9 — fix(extraction): tighten prompt with few-shot examples to suppress noise (2026-05-07)
 
 **What changed:** Rewrote the extraction system prompt and tool description.
