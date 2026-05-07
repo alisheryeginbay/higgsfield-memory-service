@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 
 from memory_service.api.health import router as health_router
 from memory_service.config import get_settings
+from memory_service.db import create_pool
 from memory_service.schemas import ErrorOut
 
 log = logging.getLogger("memory_service")
@@ -21,8 +22,12 @@ async def lifespan(app: FastAPI):
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
     log.info("memory-service starting up")
-    yield
-    log.info("memory-service shutting down")
+    app.state.db = await create_pool(settings.database_url)
+    try:
+        yield
+    finally:
+        log.info("memory-service shutting down")
+        await app.state.db.close()
 
 
 def create_app() -> FastAPI:

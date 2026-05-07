@@ -24,7 +24,18 @@ class Settings(BaseSettings):
     voyage_embed_dim: int = 1024
 
     # --- database -------------------------------------------------------
+    # Plain libpq DSN — asyncpg accepts this directly. Tools that want a
+    # SQLAlchemy URL (Alembic) call `sqlalchemy_url` below.
     database_url: str = "postgresql://memory:memory@db:5432/memory"
+
+    @property
+    def sqlalchemy_url(self) -> str:
+        url = self.database_url
+        if url.startswith("postgresql+asyncpg://"):
+            return url
+        if url.startswith("postgresql://"):
+            return "postgresql+asyncpg://" + url[len("postgresql://") :]
+        return url
 
     # --- auth (optional) ------------------------------------------------
     memory_auth_token: str = ""

@@ -1,8 +1,24 @@
-"""FastAPI dependencies: auth (db pool wired up in the next milestone)."""
+"""FastAPI dependencies: db pool, optional bearer-token auth."""
 
-from fastapi import Header, HTTPException, status
+from typing import TYPE_CHECKING
+
+from fastapi import Header, HTTPException, Request, status
 
 from memory_service.config import Settings, get_settings
+
+if TYPE_CHECKING:
+    import asyncpg
+
+
+def get_db(request: Request) -> "asyncpg.Pool":
+    """Return the shared asyncpg pool attached to app.state in lifespan."""
+    pool = getattr(request.app.state, "db", None)
+    if pool is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="database not initialised",
+        )
+    return pool
 
 
 async def require_auth(

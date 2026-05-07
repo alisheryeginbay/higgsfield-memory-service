@@ -4,6 +4,25 @@ Iteration history for the memory service. Newest first. Each entry tracks
 a single commit — what changed, why, what was observed, and what comes
 next.
 
+## v0.3 — feat: db pool + alembic init migration (turns, memories, pgvector) (2026-05-07)
+
+**What changed:** `db.py` opens an asyncpg pool that registers the pgvector
+codec on every fresh connection (so vector columns added in later migrations
+Just Work). Lifespan opens/closes the pool on `app.state.db`; `get_db`
+dependency for routes. Alembic configured async-mode (`migrations/env.py`
+builds a SQLAlchemy URL via a new `Settings.sqlalchemy_url` property).
+`0001_init` creates `turns` and `memories` tables plus `vector` and
+`uuid-ossp` extensions, with indexes on the access patterns we'll exercise
+first (`turns(session_id)`, `turns(user_id, ts DESC)`,
+`memories(user_id, active)`, `memories(user_id, key)`,
+`memories(source_session)`).
+
+**Verified:** `alembic history` shows `0001_init` at head; `alembic upgrade
+head --sql` renders valid SQL offline.
+
+**Next:** Wire all 7 contract endpoints — `/turns` insert, cold stubs for
+recall/search/memories, idempotent admin DELETEs.
+
 ## v0.2 — feat: app factory + contract schemas + /health (2026-05-07)
 
 **What changed:** `schemas.py` with Pydantic v2 models for all 7 contract
