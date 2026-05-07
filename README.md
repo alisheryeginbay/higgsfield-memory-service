@@ -1,4 +1,6 @@
-# Higgsfield Memory Service
+# Memory Service
+
+> Companion writeup: [Building AI Agent Memory](https://yeginbay.com/building-ai-agent-memory/)
 
 A memory service for an AI agent. Ingests conversation turns, extracts
 structured knowledge, and answers recall queries that decide what
