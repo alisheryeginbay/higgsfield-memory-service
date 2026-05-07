@@ -4,6 +4,23 @@ Iteration history for the memory service. Newest first. Each entry tracks
 a single commit — what changed, why, what was observed, and what comes
 next.
 
+## v0.6 — test: contract smoke against live compose stack (8 tests) (2026-05-07)
+
+**What changed:** `tests/conftest.py` with a session-scoped `base_url`
+fixture that probes `/health` and skips the suite if the service isn't
+reachable (no silent fail). Async `httpx.AsyncClient` fixture per test.
+`tests/test_contract_smoke.py` with 8 cases: `/health`, full lifecycle
+(turn → recall → search → memories → both DELETEs), recall on cold
+session, malformed-turn → 422, unicode payload accepted, concurrent
+sessions don't bleed, idempotent DELETEs for unknown ids. Bodies are
+validated against the same Pydantic schemas the service exposes, so
+contract drift between handler and schema fails the suite.
+
+**Result:** 8/8 pass in 0.35s against the live compose stack.
+
+**Next:** Extraction pipeline — derive structured memories from raw turns
+via Claude tool-use, plus produce embeddings to feed the recall pipeline.
+
 ## v0.5 — feat: docker + compose stack (api + pgvector pg18 with persistent volume) (2026-05-07)
 
 **What changed:** Multi-stage `Dockerfile` (uv 0.11.11 →
