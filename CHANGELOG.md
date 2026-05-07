@@ -4,6 +4,36 @@ Iteration history for the memory service. Newest first. Each entry tracks
 a single commit — what changed, why, what was observed, and what comes
 next.
 
+## v0.15 — docs: comprehensive README — architecture, tradeoffs, failure modes (2026-05-07)
+
+**What changed:** Replaced the placeholder `README.md` with the
+architecture-review document the brief asks for. Sections: ASCII
+architecture diagram, backing-store choice + alternatives ruled out,
+extraction pipeline (steps + what we extract well + what we miss),
+recall strategy (RRF math, token-budget enforcement, priority logic,
+why events are excluded), fact evolution + supersession with honest
+limitations, optimised-for / gave-up tradeoffs, full failure-modes
+table, HTTP contract reference, run + test instructions with the
+52-test inventory, recall-quality fixture summary, repo layout, and
+the intentional-follow-ups list.
+
+**Why:** This is the brief's "primary deliverable" for human
+architecture review. The CHANGELOG tells the story of how we got
+here; the README is a 5-minute walkthrough of where we are.
+
+**Verified:** Brief's smoke test (POST /turns Berlin/NYC payload,
+POST /recall "where does this user live", GET
+/users/.../memories) — `/recall` surfaces "Berlin (city)",
+`/users/.../memories` shows structured `{type: fact, key: city,
+value: 'Berlin'}` plus a relocation event. Contract intact.
+
+**No code change.** Recall-quality stays at deterministic 0.867;
+suite 52/52.
+
+**Next:** wrap. Outstanding architectural follow-ups are listed at
+the bottom of the README; each is a 1–2 commit unit on top of
+v0.14.
+
 ## v0.14 — feat: hybrid query-aware retrieval + canonical-key prompt (2026-05-07)
 
 **What changed:**
