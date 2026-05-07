@@ -3,6 +3,7 @@
 import logging
 from contextlib import asynccontextmanager
 
+import anthropic
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
@@ -14,6 +15,7 @@ from memory_service.api.search import router as search_router
 from memory_service.api.turns import router as turns_router
 from memory_service.config import get_settings
 from memory_service.db import create_pool
+from memory_service.extraction import ClaudeExtractor, NoopExtractor
 from memory_service.schemas import ErrorOut
 
 log = logging.getLogger("memory_service")
@@ -28,11 +30,32 @@ async def lifespan(app: FastAPI):
     )
     log.info("memory-service starting up")
     app.state.db = await create_pool(settings.database_url)
+
+    if settings.anthropic_api_key:
+        anthropic_client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+        app.state.extractor = ClaudeExtractor(
+            client=anthropic_client,
+            model=settings.anthropic_model_fast,
+            confidence_floor=settings.extraction_confidence_floor,
+            max_tokens=settings.extraction_max_tokens,
+        )
+        log.info(
+            "extraction enabled — model=%s confidence_floor=%.2f",
+            settings.anthropic_model_fast,
+            settings.extraction_confidence_floor,
+        )
+    else:
+        anthropic_client = None
+        app.state.extractor = NoopExtractor()
+        log.warning("ANTHROPIC_API_KEY not set — extraction disabled (NoopExtractor)")
+
     try:
         yield
     finally:
         log.info("memory-service shutting down")
         await app.state.db.close()
+        if anthropic_client is not None:
+            await anthropic_client.close()
 
 
 def create_app() -> FastAPI:

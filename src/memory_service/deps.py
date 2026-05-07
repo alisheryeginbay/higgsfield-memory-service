@@ -1,4 +1,4 @@
-"""FastAPI dependencies: db pool, optional bearer-token auth."""
+"""FastAPI dependencies: db pool, extractor, optional bearer-token auth."""
 
 from typing import TYPE_CHECKING
 
@@ -8,6 +8,8 @@ from memory_service.config import Settings, get_settings
 
 if TYPE_CHECKING:
     import asyncpg
+
+    from memory_service.extraction import Extractor
 
 
 def get_db(request: Request) -> "asyncpg.Pool":
@@ -19,6 +21,17 @@ def get_db(request: Request) -> "asyncpg.Pool":
             detail="database not initialised",
         )
     return pool
+
+
+def get_extractor(request: Request) -> "Extractor":
+    """Return the shared extractor (Claude or Noop) attached in lifespan."""
+    extractor = getattr(request.app.state, "extractor", None)
+    if extractor is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="extractor not initialised",
+        )
+    return extractor
 
 
 async def require_auth(

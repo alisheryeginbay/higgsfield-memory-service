@@ -4,6 +4,43 @@ Iteration history for the memory service. Newest first. Each entry tracks
 a single commit — what changed, why, what was observed, and what comes
 next.
 
+## v0.8 — feat: extraction pipeline (Claude tool-use → typed memories) (2026-05-07)
+
+**What changed:** New `src/memory_service/extraction.py` —
+`ClaudeExtractor` calls `claude-haiku-4-5` with a single tool
+(`record_memories`) and `tool_choice` forcing structured output. Each
+returned memory has `type ∈ {fact, preference, opinion, event}`, a
+snake_case `key`, a concise `value`, and a `confidence ∈ [0,1]`.
+Confidence below `extraction_confidence_floor` (default 0.4) is dropped
+on the way in. `NoopExtractor` is wired in when `ANTHROPIC_API_KEY` is
+unset, so the service still boots cleanly without keys.
+
+`/turns` now extracts synchronously after the turn insert, on the same
+connection but in a *separate* transaction. Extraction or persistence
+failures are logged and swallowed — the turn always lands. New
+`extraction_confidence_floor` and `extraction_max_tokens` settings.
+
+**Tests:** 8 unit tests with `respx`-mocked Anthropic transport cover
+the happy path, confidence filtering, malformed-item skipping,
+empty-message short-circuit, API errors, and missing-tool-block
+responses. One live integration test (`test_extraction_live.py`)
+ingests a high-signal turn and asserts ≥1 structured row appears in
+`/users/{id}/memories` — gated on `ANTHROPIC_API_KEY` being set.
+
+**Recall-quality score:** still **0.200** — `/recall` is still a stub.
+That's the M9 commit. Extraction quality can be inspected directly via
+`/users/{id}/memories` once a key is configured.
+
+**Why ship this without a recall delta:** keeping extraction and recall
+surfacing in separate commits gives the changelog two cleanly-attributed
+deltas later (M8 = "memories now appear in inspection endpoint"; M9 =
+"recall score moved from 0.200 to X"), instead of one fat commit where
+it's unclear which change caused which improvement.
+
+**Next:** wire `/recall` to the memories table — fetch the user's
+active memories, render a "Known facts" block, return as context. First
+commit where the recall-quality number actually moves.
+
 ## v0.7 — test: recall-quality fixture + harness (5 scenarios) (2026-05-07)
 
 **What changed:** Five hand-written scenarios in `fixtures/recall_quality/`

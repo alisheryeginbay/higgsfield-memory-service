@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     voyage_embed_model: str = "voyage-4-lite"
     voyage_embed_dim: int = 1024
 
+    # --- extraction -----------------------------------------------------
+    # Memories below this confidence are dropped on insert.
+    extraction_confidence_floor: float = 0.4
+    # Cap on output tokens for the per-turn extraction call.
+    extraction_max_tokens: int = 1024
+
     # --- database -------------------------------------------------------
     # Plain libpq DSN — asyncpg accepts this directly. Tools that want a
     # SQLAlchemy URL (Alembic) call `sqlalchemy_url` below.
