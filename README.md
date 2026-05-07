@@ -4,10 +4,9 @@ A memory service for an AI agent. Ingests conversation turns, extracts
 structured knowledge, and answers recall queries that decide what
 context the agent sees on the next turn.
 
-Built across 14 well-attributed commits with measured score deltas at
-each step — see `CHANGELOG.md` for the iteration narrative. This README
-documents the *current* architecture and decisions; the changelog
-documents how we got here.
+See `CHANGELOG.md` for the iteration narrative — every commit ships
+with its own entry, measured score delta where one applied. This
+README documents the *current* architecture and decisions.
 
 ## Status
 
@@ -279,7 +278,7 @@ export VOYAGE_API_KEY=$(grep '^VOYAGE_API_KEY=' .env | cut -d= -f2- | tr -d '"')
 uv run pytest
 ```
 
-### Test inventory (56 total)
+### Test inventory
 
 | File | Purpose | Count | Live? |
 |---|---|---|---|
@@ -314,7 +313,7 @@ Aggregate: **0.867** deterministic across 5 runs.
 ```
 .
 ├── README.md                  # this file
-├── CHANGELOG.md               # iteration narrative (v0.1–v0.14)
+├── CHANGELOG.md               # iteration narrative
 ├── docker-compose.yml         # api + db + named volume
 ├── Dockerfile                 # multi-stage Python 3.13-slim + uv
 ├── .env.example
