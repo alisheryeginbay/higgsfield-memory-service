@@ -22,7 +22,6 @@ build
 .env
 .env.local
 .env.*.local
-README.md
 CHANGELOG.md
 docs/
 fixtures/

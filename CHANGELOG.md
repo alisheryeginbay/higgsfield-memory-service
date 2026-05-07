@@ -4,6 +4,31 @@ Iteration history for the memory service. Newest first. Each entry tracks
 a single commit — what changed, why, what was observed, and what comes
 next.
 
+## v0.5 — feat: docker + compose stack (api + pgvector pg18 with persistent volume) (2026-05-07)
+
+**What changed:** Multi-stage `Dockerfile` (uv 0.11.11 →
+`python:3.13-slim-bookworm` builder doing `uv sync --frozen --no-dev` →
+slim runtime). Runtime CMD runs `alembic upgrade head` then
+`exec uvicorn` so migrations apply on every cold start and uvicorn becomes
+PID 1. `docker-compose.yml` spins up `pgvector/pgvector:pg18` with a
+`pg_isready` healthcheck and a named volume, plus the `api` with a
+urllib-based `/health` healthcheck and `depends_on: db: service_healthy`.
+`.dockerignore` updated to keep `README.md` in the build context (hatchling
+needs it).
+
+**Observed:** Postgres 18 changed the volume mount convention — it expects
+`/var/lib/postgresql` (not `/var/lib/postgresql/data`) so the major-version
+subdirectory layout works. Fixed in compose.
+
+**Verified end-to-end through compose:** `/health` 200, `/turns` 201 + UUID,
+`/recall` returns `{"context":"","citations":[]}`, `/search` returns
+`{"results":[]}`, `/users/{u}/memories` returns `{"memories":[]}`, both
+DELETEs return 204, malformed body returns 422 (no crash). Persistence:
+wrote a turn, `compose down` (no `-v`), `compose up -d`, row still in
+`turns`.
+
+**Next:** Lock the contract behaviour into a smoke test suite.
+
 ## v0.4 — feat: stub all 7 contract endpoints (2026-05-07)
 
 **What changed:** Five new routers under `src/memory_service/api/`.
