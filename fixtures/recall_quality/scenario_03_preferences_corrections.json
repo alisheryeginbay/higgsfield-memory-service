@@ -1,0 +1,49 @@
+{
+  "id": "scenario_03_preferences_corrections",
+  "description": "User states a preference, then corrects it in the same conversation. Latest stated preference should win.",
+  "turns": [
+    {
+      "session_id": "s1",
+      "messages": [
+        {"role": "user", "content": "Honestly I love TypeScript — types catch so many bugs. I use it for everything."},
+        {"role": "assistant", "content": "Fair."}
+      ],
+      "timestamp": "2026-03-20T14:00:00Z"
+    },
+    {
+      "session_id": "s1",
+      "messages": [
+        {"role": "user", "content": "Actually, scratch that — for quick scripts I always reach for Python now. TS is overkill there. I keep TS for the big stuff."},
+        {"role": "assistant", "content": "Makes sense."}
+      ],
+      "timestamp": "2026-03-20T14:08:00Z"
+    },
+    {
+      "session_id": "s1",
+      "messages": [
+        {"role": "user", "content": "By the way, my favourite IDE is Cursor — switched from VS Code about six months ago."},
+        {"role": "assistant", "content": "Noted."}
+      ],
+      "timestamp": "2026-03-20T14:15:00Z"
+    }
+  ],
+  "probes": [
+    {
+      "query": "What language does the user prefer for quick scripts?",
+      "session_id": "probe_scripts",
+      "expected_any": ["python"],
+      "forbidden_any": ["typescript"]
+    },
+    {
+      "query": "What does the user use TypeScript for?",
+      "session_id": "probe_ts_usage",
+      "expected_any": ["big", "large", "production"]
+    },
+    {
+      "query": "What IDE does the user use?",
+      "session_id": "probe_ide",
+      "expected_any": ["cursor"],
+      "forbidden_any": ["vs code", "vscode"]
+    }
+  ]
+}

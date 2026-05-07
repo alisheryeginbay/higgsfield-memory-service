@@ -1,0 +1,44 @@
+{
+  "id": "scenario_01_personal_facts",
+  "description": "Employer, city, and a pet mentioned implicitly across two turns.",
+  "turns": [
+    {
+      "session_id": "s1",
+      "messages": [
+        {"role": "user", "content": "Hey — quick intro: I'm a senior PM at Notion, based in Berlin."},
+        {"role": "assistant", "content": "Nice to meet you. What brings you here today?"}
+      ],
+      "timestamp": "2026-04-01T10:00:00Z"
+    },
+    {
+      "session_id": "s1",
+      "messages": [
+        {"role": "user", "content": "Sorry for the delay — I was just out walking Biscuit through Tiergarten. He's getting old, takes ages."},
+        {"role": "assistant", "content": "No worries. Take your time."}
+      ],
+      "timestamp": "2026-04-01T18:30:00Z"
+    }
+  ],
+  "probes": [
+    {
+      "query": "What city does the user live in?",
+      "session_id": "probe_city",
+      "expected_any": ["berlin"]
+    },
+    {
+      "query": "Where does the user work?",
+      "session_id": "probe_work",
+      "expected_any": ["notion"]
+    },
+    {
+      "query": "What's the user's role / job title?",
+      "session_id": "probe_role",
+      "expected_any": ["pm", "product manager", "senior pm"]
+    },
+    {
+      "query": "Does the user have any pets?",
+      "session_id": "probe_pets",
+      "expected_any": ["biscuit", "dog"]
+    }
+  ]
+}

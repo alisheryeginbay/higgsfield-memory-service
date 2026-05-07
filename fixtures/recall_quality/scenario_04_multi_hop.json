@@ -1,0 +1,35 @@
+{
+  "id": "scenario_04_multi_hop",
+  "description": "Two facts in different sessions; the probe needs to join them to answer.",
+  "turns": [
+    {
+      "session_id": "s_pets",
+      "messages": [
+        {"role": "user", "content": "We finally adopted a rescue dog last weekend — his name is Biscuit. He's a corgi mix."},
+        {"role": "assistant", "content": "Aww, congrats."}
+      ],
+      "timestamp": "2026-02-10T19:00:00Z"
+    },
+    {
+      "session_id": "s_move",
+      "messages": [
+        {"role": "user", "content": "Different topic — we're moving to Lisbon end of the month. Job thing."},
+        {"role": "assistant", "content": "Exciting! How long have you been planning that?"},
+        {"role": "user", "content": "About six months. Already sorted the visa."}
+      ],
+      "timestamp": "2026-02-25T16:00:00Z"
+    }
+  ],
+  "probes": [
+    {
+      "query": "What city does the user with the dog Biscuit live in?",
+      "session_id": "probe_join",
+      "expected_any": ["lisbon"]
+    },
+    {
+      "query": "What's the breed of the user's dog?",
+      "session_id": "probe_breed",
+      "expected_any": ["corgi"]
+    }
+  ]
+}

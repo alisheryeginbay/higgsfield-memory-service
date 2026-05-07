@@ -4,6 +4,32 @@ Iteration history for the memory service. Newest first. Each entry tracks
 a single commit — what changed, why, what was observed, and what comes
 next.
 
+## v0.7 — test: recall-quality fixture + harness (5 scenarios) (2026-05-07)
+
+**What changed:** Five hand-written scenarios in `fixtures/recall_quality/`
+covering personal facts (incl. implicit), fact evolution, preferences /
+corrections, multi-hop, and noise resistance.
+`tests/recall_quality_runner.py` loads + runs scenarios against the live
+service via `httpx`, computing per-probe scores via case-insensitive
+substring match (with optional `forbidden_any` blocklist).
+`tests/test_recall_quality.py` is the pytest entry — prints a per-scenario
+report and asserts `aggregate >= MIN_SCORE`. Each scenario uses a unique
+namespaced `user_id` and cleans up after itself in a `finally`.
+
+**Baseline measured:** aggregate **0.200** (3/15 probes pass). Only the
+noise-resistance scenario scores 1.0 — it passes by construction because
+the stub `/recall` always returns an empty context, which is exactly what
+that scenario asks for. Scenarios 1–4 all score 0.0 against the stub.
+This is the zero we will move.
+
+**Why this comes before extraction:** every subsequent commit that touches
+extraction, retrieval, or context assembly will ship with a delta number
+in this entry. Building the harness first turns the changelog into a
+quantitative engineering narrative instead of vibes.
+
+**Next:** Extraction pipeline — derive structured memories from raw turns
+via Claude tool-use. First feature whose effect we can measure here.
+
 ## v0.6 — test: contract smoke against live compose stack (8 tests) (2026-05-07)
 
 **What changed:** `tests/conftest.py` with a session-scoped `base_url`

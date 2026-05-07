@@ -1,0 +1,50 @@
+{
+  "id": "scenario_02_fact_evolution",
+  "description": "User changes employer across sessions — current fact must win, stale one must not appear.",
+  "turns": [
+    {
+      "session_id": "s_old",
+      "messages": [
+        {"role": "user", "content": "I work at Stripe as a backend engineer on the payments team. Been there about three years."},
+        {"role": "assistant", "content": "Got it."}
+      ],
+      "timestamp": "2026-01-15T09:00:00Z"
+    },
+    {
+      "session_id": "s_old",
+      "messages": [
+        {"role": "user", "content": "Today's been rough — Stripe had an incident in eu-west-1 and I was on call."},
+        {"role": "assistant", "content": "Hope it's resolved."}
+      ],
+      "timestamp": "2026-01-22T20:10:00Z"
+    },
+    {
+      "session_id": "s_new",
+      "messages": [
+        {"role": "user", "content": "Big news — I just left Stripe and started at Notion last Monday. Switching to a PM role too."},
+        {"role": "assistant", "content": "Congrats on the move!"}
+      ],
+      "timestamp": "2026-04-05T11:30:00Z"
+    }
+  ],
+  "probes": [
+    {
+      "query": "Where does the user currently work?",
+      "session_id": "probe_employer",
+      "expected_any": ["notion"],
+      "forbidden_any": ["stripe"]
+    },
+    {
+      "query": "What is the user's current role?",
+      "session_id": "probe_role",
+      "expected_any": ["pm", "product manager"],
+      "forbidden_any": ["backend engineer", "engineer at stripe"]
+    },
+    {
+      "query": "Tell me about the user's career history.",
+      "session_id": "probe_history",
+      "expected_any": ["stripe", "notion"],
+      "match": "all"
+    }
+  ]
+}

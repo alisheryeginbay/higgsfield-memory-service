@@ -1,0 +1,33 @@
+{
+  "id": "scenario_05_noise_resistance",
+  "description": "Conversation about cooking and weekend plans, no work/location/family info. Probes ask about topics that were never discussed — recall must return empty context, never hallucinate.",
+  "turns": [
+    {
+      "session_id": "s1",
+      "messages": [
+        {"role": "user", "content": "I'm trying to nail a sourdough starter. Day 4 and it smells fine but no real rise yet."},
+        {"role": "assistant", "content": "Day 4 is normal — give it another day or two."},
+        {"role": "user", "content": "Yeah. Also thinking of doing a long hike on Saturday if the weather holds."},
+        {"role": "assistant", "content": "Sounds fun."}
+      ],
+      "timestamp": "2026-03-12T20:30:00Z"
+    }
+  ],
+  "probes": [
+    {
+      "query": "Where does the user work?",
+      "session_id": "probe_work",
+      "expected_any": []
+    },
+    {
+      "query": "What city does the user live in?",
+      "session_id": "probe_city",
+      "expected_any": []
+    },
+    {
+      "query": "Does the user have children?",
+      "session_id": "probe_kids",
+      "expected_any": []
+    }
+  ]
+}
