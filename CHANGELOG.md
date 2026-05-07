@@ -4,6 +4,59 @@ Iteration history for the memory service. Newest first. Each entry tracks
 a single commit — what changed, why, what was observed, and what comes
 next.
 
+## v0.9 — fix(extraction): tighten prompt with few-shot examples to suppress noise (2026-05-07)
+
+**What changed:** Rewrote the extraction system prompt and tool description.
+Added 4 few-shot examples (strong extraction, noise rejection, in-turn
+correction, fact evolution) with `<turn>` / `<extracted>` / `<reasoning>`
+XML structure. Tightened the `event` definition to require *significant*
+life changes, not day-to-day activity. Added explicit anchors: "if in
+doubt, omit", "single mention ≠ lasting preference", "value is a concise
+assertion not a sentence". Beefed up the tool description from 1 sentence
+to a 6-sentence usage guide (per Anthropic's own best-practice doc:
+descriptions are by far the largest lever on tool-use quality).
+
+**Why:** v0.8 worked well on explicit facts but extracted noise from
+chitchat ("sourdough day 4" → 2 memories). The brief grades on
+noise-resistance; the recall-quality fixture's scenario_05 specifically
+tests it. Better to fix this at extraction time than try to filter it
+out at recall time.
+
+**Probe-based eval (5 manual ingests, before / after):**
+
+| Probe | Before | After |
+|---|---|---|
+| Implicit dog + city ("walking Biscuit through Tiergarten") | 3 (incl. inferred Berlin) | 2 (dropped ambiguous inference) |
+| Preference correction (TS → Python for scripts) | 1 verbose | 1 clean |
+| Noise (sourdough starter day 4) | **2 trivial memories** | **0 memories** ✅ |
+| Fact evolution single turn (Stripe → Notion + role change) | 4 split events | 3 consolidated (current facts + one `career_change` event) |
+| Stacked dietary (allergy + vegetarian + duration) | n/a | 3 clean canonical-key memories |
+
+The "lost Berlin inference" is not really a regression — Tiergarten alone
+is ambiguous (visiting vs living), and scenario_01 in the recall fixture
+has an explicit "based in Berlin" from an earlier turn that will populate
+the city fact directly.
+
+**Research basis (notes for the interview):** Anthropic tool-use docs say
+descriptions are the largest lever; few-shot examples are the most
+reliable consistency lever for ambiguous judgments (Anthropic + the
+SurePrompts few-shot guide). Synthius-Mem and Memori both stress
+"filtering low-signal records" at write time — bloated memory hurts
+downstream recall more than misses do. Synthius-Mem's framing: "a
+persona that perfectly remembers every trivia detail but bloats to
+unusable size is worse than one that captures the essential character".
+
+**Recall-quality score:** still **0.200** — `/recall` is still a stub.
+Move comes in M9.
+
+**Verified:** unit tests still pass (mocked transport unaffected by
+prompt changes). Live probes show the noise issue is fixed and the other
+categories improved or held.
+
+**Next:** wire `/recall` to the memories table — fetch the user's active
+memories, render a "Known facts about this user" block, return as
+context. First commit where the score actually moves.
+
 ## v0.8 — feat: extraction pipeline (Claude tool-use → typed memories) (2026-05-07)
 
 **What changed:** New `src/memory_service/extraction.py` —

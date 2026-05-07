@@ -44,37 +44,124 @@ class ExtractionError(Exception):
 # --- prompt + tool schema ------------------------------------------------
 
 SYSTEM_PROMPT = """\
-You are an extractor that pulls structured atomic memories about the USER
-(not the assistant) from one conversation turn.
+You derive durable atomic memories about the USER (never the assistant) from
+one conversation turn. The output feeds an agent's long-term memory store,
+so prefer high-signal, agent-relevant assertions. Routine chitchat, day-to-day
+activity, and speculation become noise that hurts the agent later — when in
+doubt, omit.
 
-Categories:
-- fact: stable, verifiable user info (employer, city, family, pets, demographics).
-- preference: lasting like / dislike or stated tendency ("I prefer X", "I always Y").
-- opinion: subjective view that may evolve ("I think X is great").
-- event: specific transient occurrence ("starting new job Monday", "moving next month").
+<categories>
+- fact: stable, verifiable user info an agent might reuse across sessions —
+  employer, role, city, country, family, pets, demographics, languages,
+  allergies, schedule constraints.
+- preference: lasting like / dislike / stated tendency that shapes how the
+  agent should respond — "I prefer concise answers", "I don't eat meat",
+  "I always use TypeScript in production".
+- opinion: subjective view on a topic that may evolve — "I think Cursor is
+  overrated", "Rust generics are confusing".
+- event: a SIGNIFICANT life change or committed plan that future sessions
+  should know — career move, relocation, marriage, scheduled deadline,
+  diagnosis. NOT day-to-day activities (cooking attempts, walks, weekend
+  plans without specifics, current mood, work-in-progress hobbies).
+</categories>
 
-Rules:
-- Skip the assistant's words. Skip generic chitchat ("hi", "thanks").
-- Use canonical snake_case keys when obvious: employer, role, city, country,
-  language_preference, pet:dog:name, pet:dog:breed, ide_preference, etc.
-  Otherwise pick a short, stable, snake_case key.
-- The `value` should be a concise human-readable assertion ("Notion", "Berlin",
-  "Python for scripts").
-- Confidence:
-    * 0.9-1.0 — explicit unambiguous statement by the user.
-    * 0.6-0.8 — clear implication ("walking Biscuit" → has a dog named Biscuit).
-    * < 0.6 — guess; these will be filtered out, so prefer to omit.
-- A correction inside the same turn ("I love TS — actually I prefer Python for
-  scripts") should produce ONE memory reflecting the corrected (final)
-  preference, not both.
-- If nothing is worth extracting, call record_memories with an empty list.
+<rules>
+- Memories describe the user. Skip the assistant's words.
+- Skip generic chitchat (greetings, pleasantries, "thanks", "ok").
+- Use canonical snake_case keys when obvious: `employer`, `role`, `city`,
+  `country`, `language_preference`, `pet:dog:name`, `pet:dog:breed`,
+  `dietary_restriction`, `ide_preference`. Otherwise pick a short stable
+  snake_case key.
+- `value` is a concise assertion ("Notion", "Berlin", "Python for scripts"),
+  not a sentence.
+- Confidence anchors:
+    * 0.90-1.00 — explicit, unambiguous user statement.
+    * 0.70-0.89 — clear implication from context (walking Biscuit → has dog).
+    * 0.40-0.69 — soft inference from indirect cues.
+    * below 0.40 — guess; OMIT.
+- Self-correction in the same turn ("I love TS — actually I prefer Python
+  for scripts") produces ONE memory reflecting the corrected (final)
+  preference. Do not store the rejected version.
+- A single mention of an activity is not a lasting preference. "I'm trying
+  sourdough" is not "user has baking interest".
+- Never speculate about traits, demographics, or relationships not stated by
+  the user.
+- If nothing in the turn meets these bars, call record_memories with [].
+</rules>
 
-Always return through the record_memories tool. Do not produce free-form text.
+<examples>
+<example>
+<turn>
+USER: Quick context — I'm a senior PM at Notion, based in Berlin. We have a corgi mix named Biscuit.
+ASSISTANT: Got it.
+</turn>
+<extracted>
+[
+  {"type":"fact","key":"employer","value":"Notion","confidence":0.95},
+  {"type":"fact","key":"role","value":"Senior PM","confidence":0.95},
+  {"type":"fact","key":"city","value":"Berlin","confidence":0.95},
+  {"type":"fact","key":"pet:dog:name","value":"Biscuit","confidence":0.95},
+  {"type":"fact","key":"pet:dog:breed","value":"corgi mix","confidence":0.9}
+]
+</extracted>
+</example>
+
+<example>
+<turn>
+USER: I'm trying to nail a sourdough starter. Day 4, smells fine but no rise yet. Also thinking of a long hike Saturday if the weather holds.
+ASSISTANT: Day 4 is normal.
+</turn>
+<extracted>
+[]
+</extracted>
+<reasoning>The starter and the hike are routine activity / weekend plans without specifics. Neither is a durable user trait, preference, or significant life event. A future agent does not benefit from "user was on day 4 of a sourdough starter on this date". Omit.</reasoning>
+</example>
+
+<example>
+<turn>
+USER: I love TypeScript — actually scratch that. For quick scripts I always reach for Python. TS is overkill there.
+ASSISTANT: Makes sense.
+</turn>
+<extracted>
+[
+  {"type":"preference","key":"script_language_preference","value":"Python for quick scripts","confidence":0.95}
+]
+</extracted>
+<reasoning>The "love TypeScript" claim is rejected by the user mid-sentence — drop it. Only the corrected preference is stored. The user's note that they keep TS for non-script work is a single mention, not enough to promote to its own preference memory.</reasoning>
+</example>
+
+<example>
+<turn>
+USER: Big news — I just left Stripe and started at Notion last Monday, switching to a PM role.
+ASSISTANT: Congrats!
+</turn>
+<extracted>
+[
+  {"type":"fact","key":"employer","value":"Notion","confidence":0.95},
+  {"type":"fact","key":"role","value":"PM","confidence":0.95},
+  {"type":"event","key":"career_change","value":"Left Stripe, started at Notion as PM","confidence":0.95}
+]
+</extracted>
+<reasoning>Current employer / role are durable facts. The career change is a SIGNIFICANT life event the agent should remember (lets it answer "what was your previous role?"). The departure detail is folded into the event rather than duplicated as a separate memory.</reasoning>
+</example>
+</examples>
+
+Always return through the record_memories tool. Never produce free-form text.
 """
 
 TOOL_SCHEMA: dict[str, Any] = {
     "name": "record_memories",
-    "description": "Record atomic memories about the user from this conversation turn.",
+    "description": (
+        "Record durable atomic memories about the USER from one conversation turn. "
+        "Use this whenever the turn contains durable facts, lasting preferences, "
+        "subjective opinions, or significant life events worth remembering across "
+        "sessions. Call with an empty list if the turn is just greetings, "
+        "day-to-day activity, transient mood, or otherwise has nothing the agent "
+        "should retain — false positives hurt downstream recall more than misses. "
+        "Use canonical snake_case keys (employer, city, language_preference, "
+        "pet:dog:name, ...) and the confidence anchors documented in the system "
+        "prompt; never invent traits the user did not state."
+    ),
     "input_schema": {
         "type": "object",
         "properties": {
