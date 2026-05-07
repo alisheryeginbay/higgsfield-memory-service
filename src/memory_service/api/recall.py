@@ -33,7 +33,7 @@ log = logging.getLogger(__name__)
 
 _RECALL_SQL = """
 SELECT
-    id, type, key, value, confidence, source_turn, updated_at,
+    id, type, key, value, confidence, source_session, source_turn, updated_at,
     CASE
         WHEN $1::vector IS NOT NULL AND embedding IS NOT NULL
         THEN embedding <=> $1::vector
@@ -97,6 +97,7 @@ async def post_recall(
             key=r["key"],
             value=r["value"],
             confidence=r["confidence"],
+            source_session=r["source_session"],
             source_turn=r["source_turn"],
             updated_at=r["updated_at"],
             vec_distance=r["vec_distance"],

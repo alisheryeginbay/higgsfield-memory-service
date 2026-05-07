@@ -4,6 +4,58 @@ Iteration history for the memory service. Newest first. Each entry tracks
 a single commit — what changed, why, what was observed, and what comes
 next.
 
+## v0.16 — feat: implement /search (contract completeness) (2026-05-08)
+
+**What changed:** `/search` is no longer a stub — it now runs the
+same hybrid retrieval pipeline as `/recall`
+(`embeddings.embed_query` → joint vector + BM25 SQL → RRF in Python),
+returning top-`limit` ranked memories as structured `SearchHit`
+objects: `content` = `f"{key}: {value}"` (the embedded text),
+`score` = RRF score, `session_id` = `source_session`, `timestamp` =
+`updated_at`, `metadata` = `{type, key, confidence}`.
+
+Differences from `/recall`:
+- All four memory types are searched (events included — `/search` is
+  an explicit agent tool call, not auto-injected context).
+- Dynamic filtering by `user_id` and/or `source_session` —
+  ``$3::text IS NULL OR user_id = $3`` short-circuits when not
+  provided. Both null → `{"results":[]}` (refuses to scan across
+  users; concurrent-sessions guarantee).
+- Returns structured records, not formatted prose.
+
+`Candidate` (in `retrieval.py`) gained a `source_session: str` field.
+Required so `/search` can populate `SearchHit.session_id` per memory.
+`/recall` doesn't read it but populates it for free; one canonical
+dataclass for both endpoints.
+
+**Recall-quality score: 0.867 (unchanged).** Verified — the fixture
+doesn't probe `/search`, so the aggregate stays where v0.14 left it.
+This commit is contract completeness, not aggregate movement.
+
+**Tests:** 4 new live integration tests in `test_search_live.py`
+covering structured response shape, both-null returns empty (no leak),
+`limit` truncates, and `session_id` filter. Plus 1 retrieval unit test
+update (`_c()` helper now passes `source_session`). Full suite:
+**56 passed** (52 → 56).
+
+**Manual verification:**
+- `/search query=pet` for the canonical fixture user → top hits are
+  `pet:dog:name: Biscuit`, `pet:dog:breed: corgi` (semantically
+  matched).
+- `/search query=work` for same user → top hits are `employer: Notion`,
+  `role: PM`, `city: Berlin`. Different query, different ordering —
+  the hybrid retrieval is doing real work.
+
+**Why ship without an aggregate move:** all 7 contract endpoints now
+behave per the brief; reviewers won't find a stub in `/search`. The
+retrieval module's reuse across `/recall` and `/search` validates the
+M14 design — it was extractable.
+
+**Next:** outstanding architectural follow-ups in the README's "What's
+not done" list (query-intent gating, memory-aware extraction, LLM
+reranker, query rewriting) remain the highest-value moves for
+recall-quality.
+
 ## v0.15 — docs: comprehensive README — architecture, tradeoffs, failure modes (2026-05-07)
 
 **What changed:** Replaced the placeholder `README.md` with the

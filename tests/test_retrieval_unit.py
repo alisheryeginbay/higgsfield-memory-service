@@ -27,6 +27,7 @@ def _c(
         key=label,
         value=label,
         confidence=confidence,
+        source_session="s-test",
         source_turn=uuid.uuid4(),
         updated_at=updated_at or datetime(2026, 4, 1, 12, 0, tzinfo=UTC),
         vec_distance=vec,

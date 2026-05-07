@@ -242,7 +242,7 @@ verbatim, no insert and no update — the existing row stays.
 | GET    | `/health`                         | Liveness/readiness probe (200)         |
 | POST   | `/turns`                          | Ingest a completed conversation turn   |
 | POST   | `/recall`                         | Return formatted context for the agent |
-| POST   | `/search`                         | Structured memory search (currently a stub returning `{"results":[]}` — wiring to the retrieval module is small follow-up work) |
+| POST   | `/search`                         | Structured memory search — same hybrid retrieval as `/recall` (vector + BM25 + RRF), filters by optional `user_id` / `session_id`, returns top-`limit` ranked memories as `SearchHit` objects (content, score, session_id, timestamp, metadata). Includes events; excludes superseded rows. Both filters null → empty (no cross-user leak). |
 | GET    | `/users/{user_id}/memories`       | Inspect stored memories for a user     |
 | DELETE | `/sessions/{session_id}`          | Delete all data for a session (204)    |
 | DELETE | `/users/{user_id}`                | Delete all data for a user (204)       |
@@ -279,7 +279,7 @@ export VOYAGE_API_KEY=$(grep '^VOYAGE_API_KEY=' .env | cut -d= -f2- | tr -d '"')
 uv run pytest
 ```
 
-### Test inventory (52 total)
+### Test inventory (56 total)
 
 | File | Purpose | Count | Live? |
 |---|---|---|---|
@@ -291,6 +291,7 @@ uv run pytest
 | `tests/test_embeddings_unit.py` | Voyage SDK wrapping, validation, error mapping. | 12 | no (mocked) |
 | `tests/test_extraction_live.py` | Live ingest produces structured rows in `/users/{id}/memories`. | 1 | yes (key-gated) |
 | `tests/test_supersession_live.py` | Supersession marks old inactive + sets `supersedes`; idempotent re-statement. | 2 | yes (key-gated) |
+| `tests/test_search_live.py` | `/search` returns structured hits; filter by `user_id` / `session_id`; both-null returns empty; `limit` truncates. | 4 | yes (key-gated) |
 
 ## Recall-quality Fixture
 
@@ -362,8 +363,6 @@ commits. Each is a 1–2 commit unit on top of the current architecture:
   higher-precision top-K at ~2× latency.
 - **Query rewriting** — LLM expands a probe into multiple search
   queries before retrieval.
-- **`/search` endpoint** — currently returns `{"results":[]}`; the
-  retrieval module is in place, wiring is ~30 lines.
 
 Each would ship as a per-commit delta against the current `0.867`
 baseline.

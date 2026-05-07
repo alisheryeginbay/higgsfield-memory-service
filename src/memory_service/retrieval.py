@@ -34,6 +34,7 @@ class Candidate:
     key: str
     value: str
     confidence: float
+    source_session: str
     source_turn: uuid.UUID
     updated_at: datetime
     vec_distance: float | None
