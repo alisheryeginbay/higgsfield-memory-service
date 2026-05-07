@@ -4,6 +4,56 @@ Iteration history for the memory service. Newest first. Each entry tracks
 a single commit — what changed, why, what was observed, and what comes
 next.
 
+## v0.13 — feat: embeddings infrastructure (Voyage + pgvector + tsvector) (2026-05-07)
+
+**What changed:** Plumbing-only commit that adds the storage and
+generation paths for hybrid retrieval. No `/recall` behavior change yet
+— that's the next commit (v0.14), which is when the score moves.
+
+- Migration `0002`: `embedding vector(1024)` column on `memories`,
+  generated `tsv tsvector` column with key-component splitting
+  (`pet:dog:name` → searchable tokens), HNSW index on `embedding` with
+  `vector_cosine_ops`, GIN index on `tsv`.
+- New `src/memory_service/embeddings.py` — `Embedder` protocol,
+  `VoyageEmbedder` (asymmetric `input_type="document"` for stored
+  memories, `"query"` for recall), `NoopEmbedder` for the no-key
+  degraded path. Wraps SDK errors as `EmbeddingError`, validates
+  dim + length on every response.
+- `extraction.persist_memories` now batches one Voyage call per turn
+  (regardless of memory count) and writes `embedding` alongside the
+  existing columns. Voyage failures degrade to NULL embedding rather
+  than blocking insert — same "extraction is enrichment" discipline
+  as v0.8.
+- Lifespan instantiates the embedder once at startup based on
+  `VOYAGE_API_KEY`; `get_embedder` dependency wires it into `/turns`.
+
+**Recall-quality score: 0.867 (unchanged).** Verified:
+`/recall` SQL untouched, fixture aggregate stays exactly where v0.12
+left it. The point of this commit is the foundation, not movement.
+
+**Tests:** 12 new unit tests in `test_embeddings_unit.py` mock the
+Voyage SDK at the client boundary (voyageai uses aiohttp, not httpx,
+so respx doesn't help; `AsyncMock` on `client.embed` does the job).
+Coverage: happy paths for documents/queries, empty-batch short-circuit,
+SDK error wrapping, length mismatch, dimension mismatch.
+Full suite: 42 passed (with `ANTHROPIC_API_KEY` set; existing live
+extraction + supersession tests now also exercise the embedder
+implicitly because every `/turns` call writes an embedding).
+
+**Manual verification:** ingested a turn, inspected raw rows via
+`psql` — every memory has `vector_dims(embedding) = 1024` and a
+non-empty `tsv` column.
+
+**Why ship this without a recall delta:** keeping the embeddings
+plumbing isolated lets the next commit attribute its score move
+cleanly to the retrieval-pipeline switch (and the bundled M13 prompt
+cleanup) rather than mixing it with infrastructure work.
+
+**Next (v0.14):** flip `/recall` to hybrid retrieval — embed query,
+joint vector + BM25 search, RRF combine, top-K render. Re-introduce
+events into the retrieval pool. Bundle the deferred M13 prompt
+cleanup (canonical-keys glossary + conciseness rule).
+
 ## v0.12 — feat: exclude events from default /recall context (2026-05-07)
 
 **What changed:** One-line SQL filter in `api/recall.py` —

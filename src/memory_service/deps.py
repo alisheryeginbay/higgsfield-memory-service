@@ -9,6 +9,7 @@ from memory_service.config import Settings, get_settings
 if TYPE_CHECKING:
     import asyncpg
 
+    from memory_service.embeddings import Embedder
     from memory_service.extraction import Extractor
 
 
@@ -32,6 +33,17 @@ def get_extractor(request: Request) -> "Extractor":
             detail="extractor not initialised",
         )
     return extractor
+
+
+def get_embedder(request: Request) -> "Embedder":
+    """Return the shared embedder (Voyage or Noop) attached in lifespan."""
+    embedder = getattr(request.app.state, "embedder", None)
+    if embedder is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="embedder not initialised",
+        )
+    return embedder
 
 
 async def require_auth(

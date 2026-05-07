@@ -15,12 +15,15 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any, Literal, Protocol, TypedDict
+from typing import TYPE_CHECKING, Any, Literal, Protocol, TypedDict
 
 import anthropic
 import asyncpg
 
 from memory_service.schemas import Message
+
+if TYPE_CHECKING:
+    from memory_service.embeddings import Embedder
 
 log = logging.getLogger(__name__)
 
@@ -325,8 +328,9 @@ async def persist_memories(
     source_session: str,
     source_turn: uuid.UUID,
     memories: list[ExtractedMemory],
+    embedder: "Embedder",
 ) -> None:
-    """Insert extracted memories, applying per-key supersession.
+    """Insert extracted memories, applying per-key supersession + embedding.
 
     For `fact` / `preference` / `opinion`: if an active memory with the same
     `(user_id, key)` exists, mark all such rows inactive and insert the new
@@ -336,12 +340,28 @@ async def persist_memories(
 
     For `event`: always insert. Events accumulate; we may prune them later.
 
+    Each memory is embedded as ``"{key}: {value}"`` in one batched Voyage
+    call; failures degrade to NULL embeddings (the row still persists, BM25
+    will rank it in M14b).
+
     Caller is responsible for wrapping this in a transaction.
     """
     if not memories:
         return
 
-    for m in memories:
+    # One Voyage call for the whole turn, regardless of memory count.
+    texts = [f"{m['key']}: {m['value']}" for m in memories]
+    try:
+        embeddings = await embedder.embed_documents(texts)
+    except Exception:
+        log.warning(
+            "embedding batch failed for turn %s; inserting with NULL embeddings",
+            source_turn,
+            exc_info=True,
+        )
+        embeddings = [None] * len(memories)
+
+    for m, emb in zip(memories, embeddings, strict=True):
         if m["type"] in _SUPERSEDED_TYPES:
             existing = await conn.fetchrow(
                 """
@@ -376,8 +396,8 @@ async def persist_memories(
                 """
                 INSERT INTO memories
                     (user_id, type, key, value, confidence,
-                     source_session, source_turn, supersedes)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                     source_session, source_turn, supersedes, embedding)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 """,
                 user_id,
                 m["type"],
@@ -387,6 +407,7 @@ async def persist_memories(
                 source_session,
                 source_turn,
                 supersedes_id,
+                emb,
             )
         else:
             # Event: bulk semantic. No supersession.
@@ -394,8 +415,8 @@ async def persist_memories(
                 """
                 INSERT INTO memories
                     (user_id, type, key, value, confidence,
-                     source_session, source_turn)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                     source_session, source_turn, embedding)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 """,
                 user_id,
                 m["type"],
@@ -404,4 +425,5 @@ async def persist_memories(
                 m["confidence"],
                 source_session,
                 source_turn,
+                emb,
             )

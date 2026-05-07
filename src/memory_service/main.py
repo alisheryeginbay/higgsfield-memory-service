@@ -4,6 +4,7 @@ import logging
 from contextlib import asynccontextmanager
 
 import anthropic
+import voyageai
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
@@ -15,6 +16,7 @@ from memory_service.api.search import router as search_router
 from memory_service.api.turns import router as turns_router
 from memory_service.config import get_settings
 from memory_service.db import create_pool
+from memory_service.embeddings import NoopEmbedder, VoyageEmbedder
 from memory_service.extraction import ClaudeExtractor, NoopExtractor
 from memory_service.schemas import ErrorOut
 
@@ -48,6 +50,21 @@ async def lifespan(app: FastAPI):
         anthropic_client = None
         app.state.extractor = NoopExtractor()
         log.warning("ANTHROPIC_API_KEY not set — extraction disabled (NoopExtractor)")
+
+    if settings.voyage_api_key:
+        app.state.embedder = VoyageEmbedder(
+            client=voyageai.AsyncClient(api_key=settings.voyage_api_key),
+            model=settings.voyage_embed_model,
+            output_dimension=settings.voyage_embed_dim,
+        )
+        log.info(
+            "embeddings enabled — model=%s dim=%d",
+            settings.voyage_embed_model,
+            settings.voyage_embed_dim,
+        )
+    else:
+        app.state.embedder = NoopEmbedder()
+        log.warning("VOYAGE_API_KEY not set — embedder disabled (NoopEmbedder)")
 
     try:
         yield

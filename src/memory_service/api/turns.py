@@ -15,7 +15,8 @@ import logging
 import asyncpg
 from fastapi import APIRouter, Depends, status
 
-from memory_service.deps import get_db, get_extractor, require_auth
+from memory_service.deps import get_db, get_embedder, get_extractor, require_auth
+from memory_service.embeddings import Embedder
 from memory_service.extraction import Extractor, persist_memories
 from memory_service.schemas import TurnIn, TurnOut
 
@@ -33,6 +34,7 @@ async def post_turn(
     payload: TurnIn,
     db: asyncpg.Pool = Depends(get_db),
     extractor: Extractor = Depends(get_extractor),
+    embedder: Embedder = Depends(get_embedder),
 ) -> TurnOut:
     messages_json = json.dumps([m.model_dump(exclude_none=True) for m in payload.messages])
     metadata_json = json.dumps(payload.metadata or {})
@@ -71,6 +73,7 @@ async def post_turn(
                             source_session=payload.session_id,
                             source_turn=turn_id,
                             memories=memories,
+                            embedder=embedder,
                         )
                 except Exception:
                     log.warning(
