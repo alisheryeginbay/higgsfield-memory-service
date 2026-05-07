@@ -21,17 +21,24 @@ from memory_service.schemas import RecallIn, RecallOut
 router = APIRouter(tags=["recall"])
 
 
+# Events are intentionally excluded from default recall context. Their value
+# strings are narrative ("Left Stripe, started at Notion as PM") and routinely
+# contain superseded entities, which tripped `forbidden_any` checks for
+# probes asking about *current* state. Events still persist and surface via
+# `/users/{user_id}/memories`; later commits may opt them in for queries
+# that explicitly want history.
 _RECALL_SQL = """
 SELECT id, type, key, value, confidence, source_turn, updated_at
 FROM memories
-WHERE user_id = $1 AND active = TRUE
+WHERE user_id = $1
+  AND active = TRUE
+  AND type IN ('fact', 'preference', 'opinion')
 ORDER BY
     CASE type
         WHEN 'fact'       THEN 1
         WHEN 'preference' THEN 2
         WHEN 'opinion'    THEN 3
-        WHEN 'event'      THEN 4
-        ELSE 5
+        ELSE 4
     END,
     updated_at DESC,
     confidence DESC
