@@ -312,6 +312,12 @@ class ClaudeExtractor:
 # --- persistence ---------------------------------------------------------
 
 
+# Types that supersede the existing active memory with the same key.
+# Events are inherently temporal — multiple "career_change" rows over time
+# are valid, so we never supersede them.
+_SUPERSEDED_TYPES: frozenset[str] = frozenset({"fact", "preference", "opinion"})
+
+
 async def persist_memories(
     conn: asyncpg.Connection,
     *,
@@ -320,22 +326,77 @@ async def persist_memories(
     source_turn: uuid.UUID,
     memories: list[ExtractedMemory],
 ) -> None:
-    """Insert a batch of extracted memories.
+    """Insert extracted memories, applying per-key supersession.
 
-    No supersession yet — every memory lands as `active=true`, `supersedes=null`.
-    Duplicate (user_id, key) pairs are allowed for now; deduping/contradiction
-    handling is a later commit.
+    For `fact` / `preference` / `opinion`: if an active memory with the same
+    `(user_id, key)` exists, mark all such rows inactive and insert the new
+    one with `supersedes` pointing at the most recent old row. If the old
+    row has the same `value` as the new one, skip the insert entirely
+    (idempotent re-statement).
+
+    For `event`: always insert. Events accumulate; we may prune them later.
+
+    Caller is responsible for wrapping this in a transaction.
     """
     if not memories:
         return
-    await conn.executemany(
-        """
-        INSERT INTO memories
-            (user_id, type, key, value, confidence, source_session, source_turn)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        """,
-        [
-            (
+
+    for m in memories:
+        if m["type"] in _SUPERSEDED_TYPES:
+            existing = await conn.fetchrow(
+                """
+                SELECT id, value FROM memories
+                WHERE user_id = $1 AND key = $2 AND active = TRUE
+                ORDER BY updated_at DESC
+                LIMIT 1
+                """,
+                user_id,
+                m["key"],
+            )
+
+            if existing is not None and existing["value"] == m["value"]:
+                # Idempotent re-statement — current state already matches.
+                continue
+
+            supersedes_id: uuid.UUID | None = None
+            if existing is not None:
+                # Close every active row for (user_id, key); defensive against
+                # any pre-supersession data that managed to leave duplicates.
+                await conn.execute(
+                    """
+                    UPDATE memories SET active = FALSE, updated_at = now()
+                    WHERE user_id = $1 AND key = $2 AND active = TRUE
+                    """,
+                    user_id,
+                    m["key"],
+                )
+                supersedes_id = existing["id"]
+
+            await conn.execute(
+                """
+                INSERT INTO memories
+                    (user_id, type, key, value, confidence,
+                     source_session, source_turn, supersedes)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                """,
+                user_id,
+                m["type"],
+                m["key"],
+                m["value"],
+                m["confidence"],
+                source_session,
+                source_turn,
+                supersedes_id,
+            )
+        else:
+            # Event: bulk semantic. No supersession.
+            await conn.execute(
+                """
+                INSERT INTO memories
+                    (user_id, type, key, value, confidence,
+                     source_session, source_turn)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                """,
                 user_id,
                 m["type"],
                 m["key"],
@@ -344,6 +405,3 @@ async def persist_memories(
                 source_session,
                 source_turn,
             )
-            for m in memories
-        ],
-    )

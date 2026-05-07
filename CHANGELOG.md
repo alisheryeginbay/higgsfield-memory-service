@@ -4,6 +4,52 @@ Iteration history for the memory service. Newest first. Each entry tracks
 a single commit — what changed, why, what was observed, and what comes
 next.
 
+## v0.11 — feat: per-key supersession for facts / preferences / opinions (2026-05-07)
+
+**What changed:** `persist_memories` now applies per-key supersession
+inside the `/turns` transaction. For `fact` / `preference` / `opinion`
+memories, an incoming row with the same `(user_id, key)` as an existing
+active one marks all matching active rows `active=false`, then inserts
+the new row with `supersedes` pointing back at the most recent old id.
+Idempotent re-statement (same key + same value) is a no-op — the
+existing row stays, no churn. `event` rows skip supersession entirely:
+events are inherently temporal, multiple `career_change` rows over
+time are valid.
+
+**Recall-quality score: 0.733 → 0.800** (5/15 → 7/15 probes pass).
+
+| Scenario | v0.10 | v0.11 | Notes |
+|---|---|---|---|
+| 01 personal_facts | 4/4 | 4/4 | unchanged |
+| 02 fact_evolution | 1/3 | 2/3 | active employer flipped to Notion; the residual fail is the `forbidden_any: ["stripe"]` probe hitting the still-active `career_change` event whose value mentions Stripe |
+| 03 preferences_corrections | 1/3 | 1/3 | unchanged — the LLM picked different keys (`language_preference` vs `script_language_preference`) across turns, so per-key supersession can't link them |
+| 04 multi_hop | 2/2 | 2/2 | unchanged |
+| 05 noise_resistance | 3/3 | 3/3 | unchanged |
+
+**What's still leaving points on the table — and the next two commits:**
+
+- Scenario_02's third probe — fixed by **excluding `event` from default
+  recall rendering** (events are temporal context, not "facts about the
+  user"). Render-layer change, not write-layer.
+- Scenario_03 — fixed by either **canonical-key prompting** (force the
+  LLM to reuse `language_preference` instead of inventing
+  `script_language_preference`) or **memory-aware extraction** (the
+  LLM sees current memories before producing new ones). Prompting first;
+  memory-aware extraction is a bigger lever for later.
+
+Each lands as its own commit so the per-scenario delta stays
+attributable.
+
+**Tests:** 2 new live integration tests in `tests/test_supersession_live.py`
+cover (a) supersession marks old `active=false` and links via
+`supersedes`, and (b) idempotent re-statement leaves the existing row
+untouched. Full suite: 30/30 with `ANTHROPIC_API_KEY` set.
+
+**MIN_SCORE bumped:** 0.683 → 0.750 (measured 0.800 minus 0.05 slack).
+
+**Next:** exclude events from default `/recall` rendering — the cheapest
+remaining lever, should clear scenario_02 fully.
+
 ## v0.10 — feat: recall surfaces user memories as structured context (2026-05-07)
 
 **What changed:** `/recall` now actually does something. New
