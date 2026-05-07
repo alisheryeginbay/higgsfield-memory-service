@@ -6,7 +6,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
+from memory_service.api.admin import router as admin_router
 from memory_service.api.health import router as health_router
+from memory_service.api.memories import router as memories_router
+from memory_service.api.recall import router as recall_router
+from memory_service.api.search import router as search_router
+from memory_service.api.turns import router as turns_router
 from memory_service.config import get_settings
 from memory_service.db import create_pool
 from memory_service.schemas import ErrorOut
@@ -38,6 +43,11 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(health_router)
+    app.include_router(turns_router)
+    app.include_router(recall_router)
+    app.include_router(search_router)
+    app.include_router(memories_router)
+    app.include_router(admin_router)
 
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, exc: Exception) -> JSONResponse:

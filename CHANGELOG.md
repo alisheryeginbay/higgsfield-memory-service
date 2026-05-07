@@ -4,6 +4,25 @@ Iteration history for the memory service. Newest first. Each entry tracks
 a single commit — what changed, why, what was observed, and what comes
 next.
 
+## v0.4 — feat: stub all 7 contract endpoints (2026-05-07)
+
+**What changed:** Five new routers under `src/memory_service/api/`.
+`/turns` inserts a row with messages serialised to JSONB and returns the
+new UUID. `/recall` and `/search` return well-formed empty payloads
+(cold-session contract: never error). `/users/{user_id}/memories` queries
+`memories` directly (returns `[]` until extraction lands).
+`/sessions/{session_id}` and `/users/{user_id}` issue idempotent DELETEs
+and return 204. All endpoints (except `/health`) are gated by the optional
+bearer-auth dependency.
+
+**Verified:** All 7 routes register and resolve to handlers — `GET /health`,
+`POST /turns`, `POST /recall`, `POST /search`,
+`GET /users/{user_id}/memories`, `DELETE /sessions/{session_id}`,
+`DELETE /users/{user_id}`.
+
+**Next:** Dockerfile + docker-compose.yml so `docker compose up` boots the
+whole stack.
+
 ## v0.3 — feat: db pool + alembic init migration (turns, memories, pgvector) (2026-05-07)
 
 **What changed:** `db.py` opens an asyncpg pool that registers the pgvector
