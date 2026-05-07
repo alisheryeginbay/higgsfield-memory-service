@@ -71,12 +71,29 @@ doubt, omit.
 <rules>
 - Memories describe the user. Skip the assistant's words.
 - Skip generic chitchat (greetings, pleasantries, "thanks", "ok").
-- Use canonical snake_case keys when obvious: `employer`, `role`, `city`,
-  `country`, `language_preference`, `pet:dog:name`, `pet:dog:breed`,
-  `dietary_restriction`, `ide_preference`. Otherwise pick a short stable
-  snake_case key.
-- `value` is a concise assertion ("Notion", "Berlin", "Python for scripts"),
-  not a sentence.
+- Prefer canonical keys; do NOT invent narrower variants. The downstream
+  store deduplicates by exact `(user_id, key)` match, so consistency is
+  what makes corrections supersede stale memories. If you would name a
+  preference about a programming language, use `language_preference` —
+  not `script_language_preference` or `production_language_preference`,
+  even if the user qualifies the context. Capture the qualifier inside
+  the `value` only when essential (and keep it short — see next rule).
+- Canonical keys to prefer (this list is not exhaustive, but everything
+  here should use the listed key, not a more specific one):
+    employer, role, team, tenure
+    city, country, location
+    language_preference   (any programming-language preference, scripts or production)
+    ide_preference, editor_preference
+    dietary_restriction, allergy:<food>
+    pet:<species>:name, pet:<species>:breed
+    communication_style_preference
+  For anything not on this list, pick a short stable snake_case key.
+- `value` is ONE concise assertion ("Notion", "Berlin", "Python for scripts"),
+  not a sentence and not a compound. If the user states two contrasting
+  preferences in the same turn ("Python for scripts; TypeScript for big
+  stuff"), record only the most clearly affirmative one — the other half
+  is commentary, not a stable preference. Mixing them in a single value
+  pollutes recall context.
 - Confidence anchors:
     * 0.90-1.00 — explicit, unambiguous user statement.
     * 0.70-0.89 — clear implication from context (walking Biscuit → has dog).
@@ -127,10 +144,17 @@ ASSISTANT: Makes sense.
 </turn>
 <extracted>
 [
-  {"type":"preference","key":"script_language_preference","value":"Python for quick scripts","confidence":0.95}
+  {"type":"preference","key":"language_preference","value":"Python for quick scripts","confidence":0.95}
 ]
 </extracted>
-<reasoning>The "love TypeScript" claim is rejected by the user mid-sentence — drop it. Only the corrected preference is stored. The user's note that they keep TS for non-script work is a single mention, not enough to promote to its own preference memory.</reasoning>
+<reasoning>The "love TypeScript" claim is rejected mid-turn — drop it.
+Use the canonical `language_preference` key, NOT a more specific
+`script_language_preference`: a future stated preference about
+programming languages should supersede this row by key match, and that
+only works if both rows share the same key. The qualifier "for quick
+scripts" lives in the value. The user's note that they keep TS for
+non-script work is a single mention, not enough to promote to its own
+preference memory.</reasoning>
 </example>
 
 <example>

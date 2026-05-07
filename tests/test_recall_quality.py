@@ -27,7 +27,8 @@ FIXTURES_DIR = REPO_ROOT / "fixtures" / "recall_quality"
 #   v0.10  0.683 (recall surfaces user memories; measured 0.733 with 0.05 slack)
 #   v0.11  0.750 (per-key supersession; measured 0.800 with 0.05 slack)
 #   v0.12  0.815 (events excluded from /recall; measured 0.867 with 0.05 slack)
-MIN_SCORE = 0.815
+#   v0.14  0.850 (hybrid retrieval + canonical-key prompt; measured 0.867 deterministic, no jitter)
+MIN_SCORE = 0.850
 
 
 pytestmark = pytest.mark.asyncio

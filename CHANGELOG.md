@@ -4,6 +4,76 @@ Iteration history for the memory service. Newest first. Each entry tracks
 a single commit — what changed, why, what was observed, and what comes
 next.
 
+## v0.14 — feat: hybrid query-aware retrieval + canonical-key prompt (2026-05-07)
+
+**What changed:**
+
+- New `src/memory_service/retrieval.py` — pure-Python `Candidate`
+  dataclass + `rrf_rank()` reciprocal rank fusion (k=60, type-priority
+  tiebreaker) with full deterministic ordering.
+- `api/recall.py` rewritten — embeds the query (Voyage; falls back to
+  BM25-only on hiccup), runs ONE SQL pulling cosine distance + ts_rank
+  for every active row, fuses via RRF in Python, takes top-K
+  (configurable, default 10), renders.
+- `recall.render_context` gains an optional `score_lookup` so
+  citations carry RRF scores instead of confidence (the contract's
+  `score` field is documented as "ranking score", so the semantic
+  fits). Default behaviour unchanged for callers that don't pass it.
+- New `recall_top_k` setting (env-tunable).
+- Bundled M13 prompt cleanup in `extraction.py`: canonical-keys
+  glossary with explicit "do NOT invent narrower variants" wording,
+  conciseness rule (`value` is one assertion, never compound),
+  rewritten example 3 demonstrating canonical `language_preference`
+  with reasoning that explains *why*.
+- Events stay filtered out of default recall (M12's policy preserved).
+  Re-introducing them needs query-intent classification to avoid
+  leaking superseded entities into "currently …" queries — deferred
+  to a later commit.
+
+**Recall-quality score: 0.867 → 0.867** (no aggregate move; still 13/15).
+
+| Scenario | Probe distribution change vs v0.13 |
+|---|---|
+| 01 personal_facts | 4/4 unchanged |
+| 02 fact_evolution | 2/3 unchanged (probes 1+2 pass, probe 3 still fails: needs old "Stripe" surfaced for history queries — would re-leak it to "currently" queries without query-intent gating) |
+| 03 preferences_corrections | 2/3 — DIFFERENT probes pass: canonical keys + conciseness rule swapped probe-1 (now passes: only Python in active language_preference) and probe-2 (now fails: TS-for-big half dropped). Probe 3 still passes. |
+| 04 multi_hop | 2/2 unchanged |
+| 05 noise_resistance | 3/3 unchanged |
+
+**Why ship this without an aggregate move?** The fixture has hit a
+structural ceiling — every remaining failure is a substring-matching
+artifact where the same memory store can't simultaneously satisfy
+contradictory probe pairs (current vs history; Python-only vs
+TS-also). Solving them needs query-intent gating or LLM rerank — both
+sit on top of this commit. Ranking now happens in Python over a
+hybrid (vector + BM25) candidate pool, which is the foundation those
+features need. Citations carrying meaningful relevance scores is
+also a contract win.
+
+**Variance:** measured 5 runs, all returned `0.867` exactly — the
+canonical-key prompt eliminated the LLM jitter that was previously
+flipping 0.800 ↔ 0.867 across runs. **`MIN_SCORE` bumped:**
+0.815 → 0.850 (measured 0.867 deterministic, smaller slack).
+
+**Tests:** 10 new unit tests in `test_retrieval_unit.py` cover RRF
+fusion math, top-K truncation, single-signal modes, intersection
+behavior, floor filtering, and the full tiebreaker hierarchy
+(type-priority → recency → confidence → id). Existing renderer unit
+tests untouched (the `score_lookup` parameter is opt-in). Full
+suite: 52 passed (up from 42 in v0.13 — 10 retrieval unit tests).
+
+**Latency cost:** each `/recall` adds one Voyage `embed_query` call
+(~50 input tokens, sub-cent at voyage-4-lite pricing,
+typical < 200ms).
+
+**Next:** the cheapest remaining levers are
+(a) **query-intent gating** (a tiny LLM classifier on the query —
+"current" vs "history" vs other — to gate event inclusion and
+unlock scenario_02 probe 3) and
+(b) **memory-aware extraction** (extractor sees existing user
+keys+values to deliberately reuse them, which would help with the
+canonical-key follow-through across more diverse user vocabulary).
+
 ## v0.13 — feat: embeddings infrastructure (Voyage + pgvector + tsvector) (2026-05-07)
 
 **What changed:** Plumbing-only commit that adds the storage and

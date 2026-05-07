@@ -1,47 +1,56 @@
-"""POST /recall — return formatted context for the next agent turn.
+"""POST /recall — query-aware hybrid retrieval over the memory store.
 
-Fetches the user's active memories, renders them via
-``memory_service.recall.render_context`` (pure logic — see that module
-for ordering, format, and budget rules). Cold sessions / unknown users
-return ``{"context":"","citations":[]}`` per the contract.
+Pipeline:
+1. Embed query (Voyage; falls back to BM25-only if Voyage hiccups).
+2. ONE SQL query returning every active memory for the user with both
+   signal scores attached: cosine distance vs query embedding, BM25
+   rank vs the query text. Either side can be NULL (degraded mode).
+3. ``retrieval.rrf_rank`` fuses the two lists via reciprocal rank.
+4. Top-K candidates render through ``recall.render_context`` with
+   citations carrying the RRF score.
 
-Query-aware ranking, supersession, and embedding-based retrieval are
-deliberately *not* here; this is the no-ranking baseline.
+Cold sessions / unknown users / nothing-matched all return
+``{"context":"","citations":[]}`` per the contract.
 """
 
 from __future__ import annotations
 
+import logging
+
 import asyncpg
 from fastapi import APIRouter, Depends, status
 
-from memory_service.deps import get_db, require_auth
+from memory_service.config import get_settings
+from memory_service.deps import get_db, get_embedder, require_auth
+from memory_service.embeddings import Embedder
 from memory_service.recall import MemoryRow, render_context
+from memory_service.retrieval import Candidate, rrf_rank
 from memory_service.schemas import RecallIn, RecallOut
 
 router = APIRouter(tags=["recall"])
+log = logging.getLogger(__name__)
 
 
-# Events are intentionally excluded from default recall context. Their value
-# strings are narrative ("Left Stripe, started at Notion as PM") and routinely
-# contain superseded entities, which tripped `forbidden_any` checks for
-# probes asking about *current* state. Events still persist and surface via
-# `/users/{user_id}/memories`; later commits may opt them in for queries
-# that explicitly want history.
 _RECALL_SQL = """
-SELECT id, type, key, value, confidence, source_turn, updated_at
+SELECT
+    id, type, key, value, confidence, source_turn, updated_at,
+    CASE
+        WHEN $1::vector IS NOT NULL AND embedding IS NOT NULL
+        THEN embedding <=> $1::vector
+        ELSE NULL
+    END AS vec_distance,
+    CASE
+        WHEN $2::text <> '' AND tsv @@ plainto_tsquery('english', $2)
+        THEN ts_rank_cd(tsv, plainto_tsquery('english', $2))
+        ELSE NULL
+    END AS bm25_score
 FROM memories
-WHERE user_id = $1
-  AND active = TRUE
+WHERE user_id = $3 AND active = TRUE
+  -- Events stay out of default recall (their narrative values often
+  -- contain superseded entities, which trip substring forbidden_any
+  -- checks for "current" queries). Reintroducing them needs query-
+  -- intent classification — deferred to a later commit.
   AND type IN ('fact', 'preference', 'opinion')
-ORDER BY
-    CASE type
-        WHEN 'fact'       THEN 1
-        WHEN 'preference' THEN 2
-        WHEN 'opinion'    THEN 3
-        ELSE 4
-    END,
-    updated_at DESC,
-    confidence DESC
 """
 
 
@@ -54,16 +63,35 @@ ORDER BY
 async def post_recall(
     payload: RecallIn,
     db: asyncpg.Pool = Depends(get_db),
+    embedder: Embedder = Depends(get_embedder),
 ) -> RecallOut:
     if not payload.user_id:
-        # Without a user we can't load memories — cold-session contract.
         return RecallOut(context="", citations=[])
 
-    async with db.acquire() as conn:
-        rows = await conn.fetch(_RECALL_SQL, payload.user_id)
+    # Best-effort query embed. Voyage hiccups → BM25-only retrieval.
+    query_emb: list[float] | None = None
+    if payload.query.strip():
+        try:
+            query_emb = await embedder.embed_query(payload.query)
+        except Exception:
+            log.warning(
+                "embed_query failed; falling back to BM25-only", exc_info=True
+            )
+            query_emb = None
 
-    memories = [
-        MemoryRow(
+    async with db.acquire() as conn:
+        rows = await conn.fetch(
+            _RECALL_SQL,
+            query_emb,
+            payload.query or "",
+            payload.user_id,
+        )
+
+    if not rows:
+        return RecallOut(context="", citations=[])
+
+    candidates = [
+        Candidate(
             id=r["id"],
             type=r["type"],
             key=r["key"],
@@ -71,9 +99,32 @@ async def post_recall(
             confidence=r["confidence"],
             source_turn=r["source_turn"],
             updated_at=r["updated_at"],
+            vec_distance=r["vec_distance"],
+            bm25_score=r["bm25_score"],
         )
         for r in rows
     ]
 
-    context, citations = render_context(memories, payload.max_tokens)
+    settings = get_settings()
+    ranked = rrf_rank(candidates, top_k=settings.recall_top_k)
+    if not ranked:
+        return RecallOut(context="", citations=[])
+
+    memories = [
+        MemoryRow(
+            id=c.id,
+            type=c.type,
+            key=c.key,
+            value=c.value,
+            confidence=c.confidence,
+            source_turn=c.source_turn,
+            updated_at=c.updated_at,
+        )
+        for c, _ in ranked
+    ]
+    score_lookup = {c.id: s for c, s in ranked}
+
+    context, citations = render_context(
+        memories, payload.max_tokens, score_lookup=score_lookup
+    )
     return RecallOut(context=context, citations=citations)

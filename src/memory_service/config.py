@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     # Cap on output tokens for the per-turn extraction call.
     extraction_max_tokens: int = 1024
 
+    # --- recall ---------------------------------------------------------
+    # Max memories to surface via /recall after RRF (top-K).
+    recall_top_k: int = 10
+
     # --- database -------------------------------------------------------
     # Plain libpq DSN — asyncpg accepts this directly. Tools that want a
     # SQLAlchemy URL (Alembic) call `sqlalchemy_url` below.

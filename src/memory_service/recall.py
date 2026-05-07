@@ -72,13 +72,20 @@ def _bullet(memory: MemoryRow) -> str:
 def render_context(
     memories: list[MemoryRow],
     max_tokens: int,
+    *,
+    score_lookup: dict[uuid.UUID, float] | None = None,
 ) -> tuple[str, list[Citation]]:
     """Render memories into a markdown context block and matching citations.
 
-    Memories are expected pre-sorted by ``(type-priority, updated_at DESC)``;
-    we rely on that ordering rather than re-sorting here. Truncates by
-    dropping lowest-priority bullets first (i.e. the tail of the list).
-    Citations only cover what's actually in the rendered text.
+    Memories are expected pre-sorted by the caller (M10's type-priority
+    ordering, or M14b's RRF ordering). The renderer groups them by type,
+    preserving incoming order within each section. Truncates by dropping
+    bullets in the tail of each section once the token budget is hit;
+    citations only cover what's actually in the rendered text.
+
+    If ``score_lookup`` is provided, each citation's ``score`` is taken
+    from that map (keyed by memory id) — used by M14b to surface RRF
+    scores. Without it, citations fall back to the memory's confidence.
     """
     if not memories or max_tokens <= 0:
         return "", []
@@ -118,10 +125,15 @@ def render_context(
 
             chunks.append(line)
             used += line_cost
+            score = (
+                score_lookup[m.id]
+                if score_lookup is not None and m.id in score_lookup
+                else float(m.confidence)
+            )
             citations.append(
                 Citation(
                     turn_id=str(m.source_turn),
-                    score=float(m.confidence),
+                    score=score,
                     snippet=m.value,
                 )
             )
